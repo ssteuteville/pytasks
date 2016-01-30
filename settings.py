@@ -1,0 +1,7 @@
+PORT = 8000
+
+JOB_MODULE = "jobs"
+
+EXIT_NAME = "exit"
+
+WORKER_COUNT = 2
