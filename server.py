@@ -4,19 +4,34 @@ import cgi
 from urllib import parse
 from http.server import HTTPServer
 import actions
+from settings import API_KEY, IGNORE_AUTH
 
 
 class JobQueueHandler(BaseHTTPRequestHandler):
+    get_actions = {
+        "/status": actions.status,
+    }
+
+    post_actions = {
+        "/add-task": actions.add_task,
+        "/upload-job": actions.upload_job
+    }
+
+    actions = {
+        'GET': get_actions,
+        'POST': post_actions
+    }
 
     def __init__(self, request, client_address, server):
-        self.actions = server.actions
         super().__init__(request, client_address, server)
 
     def do_GET(self):
         action = self.get_action('GET')
-        if action:
+        if not self.is_authorized():
+            self.error_401()
+        elif action:
             try:
-                resp = bytes(json.dumps(action(self.path)), 'UTF-8')
+                resp = bytes(json.dumps(action(self)), 'UTF-8')
                 self.send_response(200)
                 self.send_headers()
                 self.wfile.write(resp)
@@ -27,10 +42,11 @@ class JobQueueHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         action = self.get_action('POST')
-        post_data = self.get_post_data()
-        if action:
+        if not self.is_authorized():
+            self.error_401()
+        elif action:
             try:
-                resp = bytes(json.dumps(action(self.path, post_data)), 'UTF-8')
+                resp = bytes(json.dumps(action(self)), 'UTF-8')
                 self.send_response(200)
                 self.send_headers()
                 self.wfile.write(resp)
@@ -59,6 +75,10 @@ class JobQueueHandler(BaseHTTPRequestHandler):
             params = {}
         return self.fix_post_params(params)
 
+    def is_authorized(self):
+        auth = self.headers["authorization"]
+        return (auth == API_KEY) or IGNORE_AUTH
+
     def fix_post_params(self, params):
         ret = {}
         for key in params:
@@ -78,25 +98,16 @@ class JobQueueHandler(BaseHTTPRequestHandler):
         self.send_response(400)
         self.wfile.write(bytes("Invalid Request", "UTF-8"))
 
+    def error_401(self):
+        self.send_response(401)
+        self.wfile.write(bytes("Need to be authroized", "UTF-8"))
+
 
 class WorkerServer(HTTPServer):
 
     def __init__(self, server_address, manager, bind_and_activate=True):
         super().__init__(server_address, JobQueueHandler, bind_and_activate)
         self.manager = manager
-        self.get_actions = {
-            "/status": actions.status(self.manager),
-        }
-
-        self.post_actions = {
-            "/add-task": actions.add_task(self.manager),
-            "/upload-job": actions.upload_job
-        }
-
-        self.actions = {
-            'GET': self.get_actions,
-            'POST': self.post_actions
-        }
 
     def teardown(self):
         self.manager.shutdown()

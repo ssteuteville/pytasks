@@ -5,3 +5,7 @@ JOB_MODULE = "jobs"
 EXIT_NAME = "exit"
 
 WORKER_COUNT = 2
+
+API_KEY = 'abc123'
+
+IGNORE_AUTH = False
